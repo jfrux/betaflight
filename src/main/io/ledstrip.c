@@ -816,6 +816,7 @@ static void applyLedGpsLayer(bool updateNow, timeUs_t *timer)
 
 static void applyLedIndicatorLayer(bool updateNow, timeUs_t *timer)
 {
+    uint8_t colorIndex = COLOR_BLACK;
     static bool flash = 0;
 
     if (updateNow) {
@@ -833,8 +834,9 @@ static void applyLedIndicatorLayer(bool updateNow, timeUs_t *timer)
 
     if (!flash)
         return;
-
-    const hsvColor_t *flashColor = &HSV(ORANGE); // TODO - use user color?
+    
+    colorIndex = ledStripConfig()->ledstrip_race_color;
+    const hsvColor_t *flashColor = &hsv[colorIndex]; // TODO - use user color?
 
     quadrant_e quadrants = 0;
     if (rcCommand[ROLL] > INDICATOR_DEADBAND) {
