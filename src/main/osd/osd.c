@@ -188,6 +188,11 @@ const osd_stats_e osdStatsDisplayOrder[OSD_STAT_COUNT] = {
     OSD_STAT_TOTAL_FLIGHTS,
     OSD_STAT_TOTAL_TIME,
     OSD_STAT_TOTAL_DIST,
+    OSD_STAT_EXTRA_KAACK,
+    OSD_STAT_EXTRA_KAACK_TOTAL,
+    OSD_STAT_EXTRA_KAACK_TIME,
+    OSD_STAT_EXTRA_KAACK_TIME_TOTAL,
+    OSD_STAT_EXTRA_AVG_THROTTLE
 };
 
 // Group elements in a number of groups to reduce task scheduling overhead
@@ -324,14 +329,15 @@ void pgResetFn_osdConfig(osdConfig_t *osdConfig)
 {
     // Enable the default stats
     osdConfig->enabled_stats = 0; // reset all to off and enable only a few initially
-    osdStatSetState(OSD_STAT_MAX_SPEED, true);
-    osdStatSetState(OSD_STAT_MIN_BATTERY, true);
-    osdStatSetState(OSD_STAT_MIN_RSSI, true);
-    osdStatSetState(OSD_STAT_MAX_CURRENT, true);
-    osdStatSetState(OSD_STAT_USED_MAH, true);
-    osdStatSetState(OSD_STAT_BLACKBOX, true);
-    osdStatSetState(OSD_STAT_BLACKBOX_NUMBER, true);
     osdStatSetState(OSD_STAT_TIMER_2, true);
+    osdStatSetState(OSD_STAT_MIN_BATTERY, true);
+    osdStatSetState(OSD_STAT_MIN_LINK_QUALITY, true);
+    osdStatSetState(OSD_STAT_TOTAL_FLIGHTS, true);
+    osdStatSetState(OSD_STAT_EXTRA_KAACK, true);
+    osdStatSetState(OSD_STAT_EXTRA_KAACK_TOTAL, true);
+    osdStatSetState(OSD_STAT_EXTRA_KAACK_TIME, true);
+    osdStatSetState(OSD_STAT_EXTRA_KAACK_TIME_TOTAL, true);
+    osdStatSetState(OSD_STAT_EXTRA_AVG_THROTTLE, true);
 
     osdConfig->units = UNIT_METRIC;
 
@@ -386,7 +392,13 @@ void pgResetFn_osdConfig(osdConfig_t *osdConfig)
 
     osdConfig->stat_show_cell_value = false;
     osdConfig->framerate_hz = OSD_FRAMERATE_DEFAULT_HZ;
-    osdConfig->cms_background_type = DISPLAY_BACKGROUND_TRANSPARENT;
+
+    osdConfig->cms_background_type = DISPLAY_BACKGROUND_BLACK;
+    osdConfig->extra_osd_use_quick_menu = true;
+
+    #ifdef USE_CRAFTNAME_MSGS
+    osdConfig->osd_craftname_msgs = false;   // Insert LQ/RSSI-dBm and warnings into CraftName
+    #endif //USE_CRAFTNAME_MSGS
 }
 
 void pgResetFn_osdElementConfig(osdElementConfig_t *osdElementConfig)
@@ -493,6 +505,10 @@ static void osdResetStats(void)
     stats.max_esc_rpm  = 0;
     stats.min_link_quality = (linkQualitySource == LQ_SOURCE_NONE) ? 99 : 100; // percent
     stats.min_rssi_dbm = CRSF_SNR_MAX;
+    stats.extra_kaacks = 0;
+    stats.extra_kaack_time = 0;
+    stats.extra_throttle_sum = 0;
+    stats.extra_throttle_count = 0;
 }
 
 #if defined(USE_ESC_SENSOR) || defined(USE_DSHOT_TELEMETRY)
@@ -869,6 +885,39 @@ static bool osdDisplayStat(int statistic, uint8_t displayRow)
         osdDisplayStatisticLabel(displayRow, "TOTAL DISTANCE", buff);
         return true;
 #endif
+    case OSD_STAT_EXTRA_KAACK:
+        itoa(stats.extra_kaacks, buff, 10);
+        osdDisplayStatisticLabel(displayRow, "KAACKS", buff);
+        return true;
+    case OSD_STAT_EXTRA_KAACK_TOTAL:
+        itoa(statsConfig()->stats_extra_total_kaacks, buff, 10);
+        osdDisplayStatisticLabel(displayRow, "TOTAL KAACKS", buff);
+        return true;
+
+    case OSD_STAT_EXTRA_KAACK_TIME:
+        {
+            int seconds = stats.extra_kaack_time / 1000000;
+            const int minutes = seconds / 60;
+            seconds = seconds % 60;
+            tfp_sprintf(buff, "%02d:%02d", minutes, seconds);
+        }
+
+        osdDisplayStatisticLabel(displayRow, "KAACK TIME", buff);
+        return true;
+    case OSD_STAT_EXTRA_KAACK_TIME_TOTAL:
+        {
+            int seconds = statsConfig()->stats_extra_total_kaack_time;
+            const int minutes = seconds / 60;
+            seconds = seconds % 60;
+            tfp_sprintf(buff, "%02d:%02d", minutes, seconds);
+        }
+
+        osdDisplayStatisticLabel(displayRow, "TOTAL KAACK TIME", buff);
+        return true;
+    case OSD_STAT_EXTRA_AVG_THROTTLE:
+        itoa(stats.extra_throttle_sum / stats.extra_throttle_count, buff, 10);
+        osdDisplayStatisticLabel(displayRow, "AVG THROTTLE", buff);
+        return true;
     }
     return false;
 }
@@ -1016,7 +1065,7 @@ static timeDelta_t osdShowArmed(void)
     } else {
         ret = (REFRESH_1S / 2);
     }
-    displayWrite(osdDisplayPort, 12, 7, DISPLAYPORT_ATTR_NONE, "ARMED");
+    displayWrite(osdDisplayPort, 10, 7, DISPLAYPORT_ATTR_NONE, pilotConfig()->extraArmedWarning);
 
     if (isFlipOverAfterCrashActive()) {
         displayWrite(osdDisplayPort, 8, 8, DISPLAYPORT_ATTR_NONE, CRASH_FLIP_WARNING);
@@ -1061,6 +1110,16 @@ STATIC_UNIT_TESTED bool osdProcessStats1(timeUs_t currentTimeUs)
         timeUs_t deltaT = currentTimeUs - lastTimeUs;
         osdFlyTime += deltaT;
         stats.armed_time += deltaT;
+
+        const uint8_t throttleValue = calculateThrottlePercent();
+
+        stats.extra_throttle_count ++;
+        stats.extra_throttle_sum += throttleValue;
+
+        if (100 == throttleValue) {
+            stats.extra_kaack_time += deltaT;
+        }
+
     } else if (osdStatsEnabled) {  // handle showing/hiding stats based on OSD disable switch position
         if (displayIsGrabbed(osdDisplayPort)) {
             osdStatsEnabled = false;

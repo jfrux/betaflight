@@ -66,7 +66,9 @@
 
 #if defined(STM32F40_41xxx) || defined(STM32F411xE)
 #define USE_OVERCLOCK
+#define MINIMAL_CLI
 #endif
+
 #endif // STM32F4
 
 #ifdef STM32F7
@@ -302,6 +304,7 @@ extern uint8_t _dmaram_end__;
 #define USE_VTX_CONTROL
 #define USE_VTX_SMARTAUDIO
 #define USE_VTX_TRAMP
+#define USE_VTX_MSP
 #endif
 
 #if ((TARGET_FLASH_SIZE > 256) || (FEATURE_CUT_LEVEL < 10))
@@ -409,7 +412,7 @@ extern uint8_t _dmaram_end__;
 #define USE_OSD_STICK_OVERLAY
 #define USE_CMS_FAILSAFE_MENU
 #define USE_CMS_GPS_RESCUE_MENU
-#define USE_TELEMETRY_SENSORS_DISABLED_DETAILS
+//#define USE_TELEMETRY_SENSORS_DISABLED_DETAILS
 #define USE_VTX_TABLE
 #define USE_PERSISTENT_STATS
 #define USE_PROFILE_NAMES
@@ -421,6 +424,7 @@ extern uint8_t _dmaram_end__;
 #define USE_SIMPLIFIED_TUNING
 #define USE_RX_LINK_UPLINK_POWER
 #define USE_CRSF_V3
+#define USE_CRAFTNAME_MSGS
 #endif
 
 #if (TARGET_FLASH_SIZE > 512)

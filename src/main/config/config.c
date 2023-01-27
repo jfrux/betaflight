@@ -22,6 +22,7 @@
 #include <stdint.h>
 #include <string.h>
 #include <math.h>
+#include <ctype.h>
 
 #include "platform.h"
 
@@ -110,6 +111,11 @@ PG_REGISTER_WITH_RESET_TEMPLATE(pilotConfig_t, pilotConfig, PG_PILOT_CONFIG, 1);
 PG_RESET_TEMPLATE(pilotConfig_t, pilotConfig,
     .name = { 0 },
     .displayName = { 0 },
+    .extra100Throttle = "KAACK",
+    .extraFcHotWarning = "B*TCH IS HOT",
+    .extraTurtleModeWarning = "SORRY BRYAN",
+    .extraLowBatteryWarning = "AINT LEAVING",
+    .extraArmedWarning = "LETS GO",
 );
 
 PG_REGISTER_WITH_RESET_TEMPLATE(systemConfig_t, systemConfig, PG_SYSTEM_CONFIG, 3);
@@ -217,6 +223,15 @@ static void validateAndFixPositionConfig(void)
     }
 }
 
+void makeStringsUpperCase(void)
+{
+    toUpperCase(pilotConfigMutable()->extra100Throttle, pilotConfig()->extra100Throttle, MAX_NAME_LENGTH);
+    toUpperCase(pilotConfigMutable()->extraFcHotWarning, pilotConfig()->extraFcHotWarning, MAX_NAME_LENGTH);
+    toUpperCase(pilotConfigMutable()->extraTurtleModeWarning, pilotConfig()->extraTurtleModeWarning, MAX_NAME_LENGTH);
+    toUpperCase(pilotConfigMutable()->extraLowBatteryWarning, pilotConfig()->extraLowBatteryWarning, MAX_NAME_LENGTH);
+    toUpperCase(pilotConfigMutable()->extraArmedWarning, pilotConfig()->extraArmedWarning, MAX_NAME_LENGTH);
+}
+
 static void validateAndFixConfig(void)
 {
 #if !defined(USE_QUAD_MIXER_ONLY)
@@ -276,6 +291,10 @@ static void validateAndFixConfig(void)
 
         if (pidProfilesMutable(i)->motor_output_limit > 100 || pidProfilesMutable(i)->motor_output_limit == 0) {
             pidProfilesMutable(i)->motor_output_limit = 100;
+        }
+
+        if (pidProfilesMutable(i)->extra_motor_output_limit_hundredths >= 100) {
+            pidProfilesMutable(i)->extra_motor_output_limit_hundredths = 0;
         }
 
         if (pidProfilesMutable(i)->auto_profile_cell_count > MAX_AUTO_DETECT_CELL_COUNT || pidProfilesMutable(i)->auto_profile_cell_count < AUTO_PROFILE_CELL_COUNT_CHANGE) {
@@ -576,6 +595,7 @@ static void validateAndFixConfig(void)
 #endif
 
     validateAndfixMotorOutputReordering(motorConfigMutable()->dev.motorOutputReordering, MAX_SUPPORTED_MOTORS);
+    makeStringsUpperCase();
 
     // validate that the minimum battery cell voltage is less than the maximum cell voltage
     // reset to defaults if not

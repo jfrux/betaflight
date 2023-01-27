@@ -200,6 +200,11 @@ typedef enum {
     OSD_STAT_TOTAL_TIME,
     OSD_STAT_TOTAL_DIST,
     OSD_STAT_MIN_RSSI_DBM,
+    OSD_STAT_EXTRA_KAACK,
+    OSD_STAT_EXTRA_KAACK_TOTAL,
+    OSD_STAT_EXTRA_KAACK_TIME,
+    OSD_STAT_EXTRA_KAACK_TIME_TOTAL,
+    OSD_STAT_EXTRA_AVG_THROTTLE,
     OSD_STAT_COUNT // MUST BE LAST
 } osd_stats_e;
 
@@ -303,6 +308,11 @@ typedef struct osdConfig_s {
     uint16_t framerate_hz;
     uint8_t cms_background_type;              // For supporting devices, determines whether the CMS background is transparent or opaque
     uint8_t stat_show_cell_value;
+    uint8_t extra_osd_use_quick_menu;         // use QUICK menu YES/NO
+
+    #ifdef USE_CRAFTNAME_MSGS
+    uint8_t osd_craftname_msgs;               // Insert LQ/RSSI-dBm and warnings into CraftName
+    #endif //USE_CRAFTNAME_MSGS
 } osdConfig_t;
 
 PG_DECLARE(osdConfig_t, osdConfig);
@@ -327,6 +337,10 @@ typedef struct statistic_s {
     int32_t max_esc_rpm;
     uint16_t min_link_quality;
     int16_t min_rssi_dbm;
+    uint8_t extra_kaacks;
+    uint32_t extra_kaack_time;
+    uint32_t extra_throttle_sum;
+    uint32_t extra_throttle_count;
 } statistic_t;
 
 extern timeUs_t resumeRefreshAt;

@@ -788,15 +788,7 @@ static void osdBackgroundCraftName(osdElementParms_t *element)
     if (strlen(pilotConfig()->name) == 0) {
         strcpy(element->buff, "CRAFT_NAME");
     } else {
-        unsigned i;
-        for (i = 0; i < MAX_NAME_LENGTH; i++) {
-            if (pilotConfig()->name[i]) {
-                element->buff[i] = toupper((unsigned char)pilotConfig()->name[i]);
-            } else {
-                break;
-            }
-        }
-        element->buff[i] = '\0';
+        toUpperCase(element->buff, pilotConfig()->name, MAX_NAME_LENGTH);
     }
 }
 
@@ -875,15 +867,7 @@ static void osdBackgroundDisplayName(osdElementParms_t *element)
     if (strlen(pilotConfig()->displayName) == 0) {
         strcpy(element->buff, "DISPLAY_NAME");
     } else {
-        unsigned i;
-        for (i = 0; i < MAX_NAME_LENGTH; i++) {
-            if (pilotConfig()->displayName[i]) {
-                element->buff[i] = toupper((unsigned char)pilotConfig()->displayName[i]);
-            } else {
-                break;
-            }
-        }
-        element->buff[i] = '\0';
+        toUpperCase(element->buff, pilotConfig()->displayName, MAX_NAME_LENGTH);
     }
 }
 
@@ -901,15 +885,7 @@ static void osdElementRateProfileName(osdElementParms_t *element)
     if (strlen(currentControlRateProfile->profileName) == 0) {
         tfp_sprintf(element->buff, "RATE_%u", getCurrentControlRateProfileIndex() + 1);
     } else {
-        unsigned i;
-        for (i = 0; i < MAX_PROFILE_NAME_LENGTH; i++) {
-            if (currentControlRateProfile->profileName[i]) {
-                element->buff[i] = toupper((unsigned char)currentControlRateProfile->profileName[i]);
-            } else {
-                break;
-            }
-        }
-        element->buff[i] = '\0';
+        toUpperCase(element->buff, currentControlRateProfile->profileName, MAX_NAME_LENGTH);
     }
 }
 
@@ -918,15 +894,7 @@ static void osdElementPidProfileName(osdElementParms_t *element)
     if (strlen(currentPidProfile->profileName) == 0) {
         tfp_sprintf(element->buff, "PID_%u", getCurrentPidProfileIndex() + 1);
     } else {
-        unsigned i;
-        for (i = 0; i < MAX_PROFILE_NAME_LENGTH; i++) {
-            if (currentPidProfile->profileName[i]) {
-                element->buff[i] = toupper((unsigned char)currentPidProfile->profileName[i]);
-            } else {
-                break;
-            }
-        }
-        element->buff[i] = '\0';
+        toUpperCase(element->buff, currentPidProfile->profileName, MAX_NAME_LENGTH);
     }
 }
 #endif
@@ -939,15 +907,7 @@ static void osdElementOsdProfileName(osdElementParms_t *element)
     if (strlen(osdConfig()->profile[profileIndex - 1]) == 0) {
         tfp_sprintf(element->buff, "OSD_%u", profileIndex);
     } else {
-        unsigned i;
-        for (i = 0; i < OSD_PROFILE_NAME_LENGTH; i++) {
-            if (osdConfig()->profile[profileIndex - 1][i]) {
-                element->buff[i] = toupper((unsigned char)osdConfig()->profile[profileIndex - 1][i]);
-            } else {
-                break;
-            }
-        }
-        element->buff[i] = '\0';
+        toUpperCase(element->buff, osdConfig()->profile[profileIndex - 1], MAX_NAME_LENGTH);
     }
 }
 #endif
@@ -1423,7 +1383,34 @@ static void osdElementStickOverlay(osdElementParms_t *element)
 
 static void osdElementThrottlePosition(osdElementParms_t *element)
 {
-    tfp_sprintf(element->buff, "%c%3d", SYM_THR, calculateThrottlePercent());
+    static bool previousKaack = false;
+
+    const uint8_t throttleValue = calculateThrottlePercent();
+
+    if (ARMING_FLAG(ARMED)) {
+        if (100 == throttleValue) {
+            if (!previousKaack) {
+                osdGetStats()->extra_kaacks++;
+            }
+
+            previousKaack = true;
+        } else {
+            previousKaack = false;
+        }
+    }
+
+    if (strlen(pilotConfig()->extra100Throttle) == 0 || throttleValue < 100)
+    {
+        tfp_sprintf(element->buff, "%c%3d", SYM_THR, calculateThrottlePercent());
+    }
+    else if (0 == strcmp(pilotConfig()->extra100Throttle, "password"))
+    {
+        tfp_sprintf(element->buff, "KAACK");
+    }
+    else
+    {
+        tfp_sprintf(element->buff, pilotConfig()->extra100Throttle);
+    }
 }
 
 static void osdElementTimer(osdElementParms_t *element)
@@ -1474,6 +1461,35 @@ static void osdElementWarnings(osdElementParms_t *element)
     } else {
         CLR_BLINK(OSD_WARNINGS);
     }
+
+    #ifdef USE_CRAFTNAME_MSGS
+    // Injects data into the CraftName variable for systems which limit
+    // the available MSP data field in their OSD.
+    if (osdConfig()->osd_craftname_msgs == true) {
+        // if warning is not set, or blink is off, then display LQ & RSSI
+        if (blinkState || (strlen(element->buff) == 0)) {
+            #ifdef USE_RX_LINK_QUALITY_INFO
+            // replicate the LQ functionality without the special font symbols
+            uint16_t osdLinkQuality = 0;
+            if (linkQualitySource == LQ_SOURCE_RX_PROTOCOL_CRSF) { // 0-99
+                osdLinkQuality = rxGetLinkQuality();
+                const uint8_t osdRfMode = rxGetRfMode();
+                tfp_sprintf(element->buff, "LQ %2d:%03d %3d", osdRfMode, osdLinkQuality, getRssiDbm());
+            } else if (linkQualitySource == LQ_SOURCE_RX_PROTOCOL_GHST) { // 0-100
+                osdLinkQuality = rxGetLinkQuality();
+                tfp_sprintf(element->buff, "LQ %03d %3d", osdLinkQuality, getRssiDbm());
+            } else { // 0-9
+                osdLinkQuality = rxGetLinkQuality() * 10 / LINK_QUALITY_MAX_VALUE;
+                if (osdLinkQuality >= 10) {
+                    osdLinkQuality = 9;
+                }
+                tfp_sprintf(element->buff, "LQ %1d", osdLinkQuality);
+            }
+            #endif // USE_RX_LINK_QUALITY_INFO
+        }
+        strncpy(pilotConfigMutable()->name, element->buff, MAX_NAME_LENGTH);
+    }
+    #endif // USE_CRAFTNAME_MSGS
 }
 
 // Define the order in which the elements are drawn.
